@@ -1,16 +1,40 @@
 import Link from "next/link";
 
-export const dynamic = "force-dynamic"; // ✅ no caching / always fresh
+export const dynamic = "force-dynamic"; // no caching / always fresh
+
+function getApiBase() {
+  // Use the env var you set on Vercel:
+  const raw =
+    process.env.NEXT_PUBLIC_API_BASE_URL ||
+    process.env.NEXT_PUBLIC_API_BASE || // fallback if you used this earlier
+    "http://localhost:5000";
+
+  // remove trailing slash
+  return raw.replace(/\/+$/, "");
+}
 
 async function getCreators() {
-  const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:5000";
+  const API_BASE = getApiBase();
 
-  const res = await fetch(`${API_BASE}/api/creators`, {
-    cache: "no-store"
-  });
+  try {
+    const res = await fetch(`${API_BASE}/api/creators`, {
+      cache: "no-store",
+      // Optional: avoids hanging forever
+      // next: { revalidate: 0 },
+    });
 
-  if (!res.ok) return [];
-  return res.json();
+    if (!res.ok) {
+      // Don’t crash SSR if API returns 404/500
+      return [];
+    }
+
+    const data = await res.json();
+    return Array.isArray(data) ? data : [];
+  } catch (err) {
+    // This is the main fix: prevents "TypeError: fetch failed" from crashing the page
+    console.error("getCreators() fetch failed:", err);
+    return [];
+  }
 }
 
 function buildMailto(creator) {
@@ -80,8 +104,8 @@ function CreatorCard({ creator, apiBase }) {
 }
 
 export default async function CreatorsPage() {
+  const apiBase = getApiBase();
   const creators = await getCreators();
-  const apiBase = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:5000";
 
   return (
     <div className="min-h-screen bg-black text-white">
